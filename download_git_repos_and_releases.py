@@ -5,22 +5,26 @@ from subprocess import call
 from tqdm import tqdm
 
 def download_file(url, output_path):
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    with open(output_path, 'wb') as f, tqdm(
-        desc=url,
-        total=int(response.headers.get('content-length', 0)),
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024
-    ) as bar:
-        for chunk in response.iter_content(chunk_size=1024):
-            size = f.write(chunk)
-            bar.update(size)
+    if not os.path.exists(output_path):
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(output_path, 'wb') as f, tqdm(
+            desc=url,
+            total=int(response.headers.get('content-length', 0)),
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024
+        ) as bar:
+            for chunk in response.iter_content(chunk_size=1024):
+                size = f.write(chunk)
+                bar.update(size)
+    else:
+        print(f"File already exists: {output_path}")
 
 def download_assets_from_release(release_data, release_folder):
-    os.makedirs(release_folder, exist_ok=True)
-    print(f"Downloading assets for release: {release_data['tag_name']}")
+    if not os.path.exists(release_folder):
+        os.makedirs(release_folder, exist_ok=True)
+    print(f"Checking assets for release: {release_data['tag_name']}")
 
     if 'assets' in release_data and release_data['assets']:
         for asset in release_data['assets']:
@@ -28,8 +32,11 @@ def download_assets_from_release(release_data, release_folder):
             asset_name = asset['name']
             asset_path = os.path.join(release_folder, asset_name)
 
-            print(f"Downloading {asset_name}...")
-            download_file(asset_url, asset_path)
+            if not os.path.exists(asset_path):
+                print(f"Downloading {asset_name}...")
+                download_file(asset_url, asset_path)
+            else:
+                print(f"Asset already exists: {asset_name}")
     else:
         print(f"No assets available for release: {release_data['tag_name']}")
 
@@ -43,13 +50,17 @@ def download_assets(repo_url, base_folder, github_token):
         repo_folder = os.path.join(base_folder, repo_name)
         os.makedirs(repo_folder, exist_ok=True)
 
-        # Clone the repository
-        call(['git', 'clone', repo_url, os.path.join(repo_folder, repo_name)])
+        # Clone the repository only if it doesn't exist
+        repo_clone_path = os.path.join(repo_folder, repo_name)
+        if not os.path.exists(repo_clone_path):
+            call(['git', 'clone', repo_url, repo_clone_path])
+        else:
+            print(f"Repository already cloned: {repo_clone_path}")
 
-        # Copy README.md up a subfolder
+        # Copy README.md up a subfolder only if it doesn't exist
         readme_src = os.path.join(repo_folder, repo_name, 'README.md')
         readme_dst = os.path.join(repo_folder, 'README.md')
-        if os.path.exists(readme_src):
+        if os.path.exists(readme_src) and not os.path.exists(readme_dst):
             shutil.copy(readme_src, readme_dst)
 
         # Fetch repository details for description
@@ -108,7 +119,7 @@ def main():
                     download_assets(repo_url, base_folder, github_token)
     else:
         # User input for repository URL
-        repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/jellyfin/jellyfin-meta'): ").strip()
+        repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/author/repository'): ").strip()
         download_assets(repo_url, base_folder, github_token)
 
 if __name__ == "__main__":
