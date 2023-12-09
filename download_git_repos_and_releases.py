@@ -1,7 +1,7 @@
 import requests
 import os
 import shutil
-from subprocess import call
+import subprocess
 from tqdm import tqdm
 
 def download_file(url, output_path):
@@ -53,7 +53,7 @@ def download_assets(repo_url, base_folder, github_token):
         # Clone the repository only if it doesn't exist
         repo_clone_path = os.path.join(repo_folder, repo_name)
         if not os.path.exists(repo_clone_path):
-            call(['git', 'clone', repo_url, repo_clone_path])
+            subprocess.run(['git', 'clone', repo_url, repo_clone_path], check=True)
         else:
             print(f"Repository already cloned: {repo_clone_path}")
 
@@ -71,13 +71,14 @@ def download_assets(repo_url, base_folder, github_token):
             with open(os.path.join(repo_folder, 'description.txt'), 'w', encoding='utf-8') as f:
                 f.write(repo_data.get('description', 'No description available'))
 
-        # Check if the repository has a wiki
         wiki_url = f"{repo_url}.wiki.git"
         wiki_folder = os.path.join(repo_folder, 'Wiki')
-        wiki_clone_response = call(['git', 'clone', wiki_url, wiki_folder])
-
-        if wiki_clone_response != 0:  # Non-zero return code indicates cloning failed
-            print(f"No wiki available or accessible for {repo_url}")
+        if not os.path.exists(wiki_folder):
+            wiki_clone_result = subprocess.run(['git', 'clone', wiki_url, wiki_folder], capture_output=True, text=True)
+            if wiki_clone_result.returncode != 0:
+                print(f"No wiki available or accessible for {repo_url}")
+        else:
+            print(f"Wiki already cloned: {wiki_folder}")
 
         # Headers for authentication (if needed)
         headers = {'Authorization': f'token {github_token}'} if github_token else {}
