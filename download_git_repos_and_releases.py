@@ -1,3 +1,4 @@
+import argparse
 import requests
 import os
 import shutil
@@ -109,22 +110,28 @@ def download_assets(repo_url, base_folder, github_token, releases, prereleases):
         print(f"An error occurred with {repo_url}: {e}")
 
 def main():
-    use_text_file = True
-    base_folder = "C:/path/to/download_folder"
-    github_token = ""
-    releases = 1  # Number of latest releases to fetch
-    prereleases = 1  # Number of latest prereleases to fetch
+    folder = 'C:/path/to/folder'
+    
+    parser = argparse.ArgumentParser(description="Download and organize GitHub repository releases.")
+    parser.add_argument('--use-text-file', action='store_true', help='Use URLs from a text file')
+    parser.add_argument('--base-folder', type=str, default=f'{folder}', help='Base folder for downloads')
+    parser.add_argument('--github-token', type=str, default="", help='GitHub token for authentication')
+    parser.add_argument('--releases', type=int, default=1, help='Number of latest releases to fetch')
+    parser.add_argument('--prereleases', type=int, default=1, help='Number of latest prereleases to fetch')
+    parser.add_argument('--urls-file', type=str, default='urls.txt', help='Path to the text file with URLs')
 
-    if use_text_file:
-        with open('urls.txt', 'r') as file:
+    args = parser.parse_args()
+
+    if args.use_text_file:
+        with open(args.urls_file, 'r') as file:
             for repo_url in file:
                 repo_url = repo_url.strip()
                 if repo_url:
-                    download_assets(repo_url, base_folder, github_token, releases, prereleases)
+                    download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
     else:
-        # User input for repository URL
+        # Prompt user for repository URL
         repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/author/repository'): ").strip()
-        download_assets(repo_url, base_folder, github_token, releases, prereleases)
+        download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
 
 if __name__ == "__main__":
     main()
