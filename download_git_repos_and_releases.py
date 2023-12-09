@@ -71,11 +71,14 @@ def download_assets(repo_url, base_folder, github_token):
             with open(os.path.join(repo_folder, 'description.txt'), 'w', encoding='utf-8') as f:
                 f.write(repo_data.get('description', 'No description available'))
 
+        # Check and clone the wiki only if it doesn't exist
         wiki_url = f"{repo_url}.wiki.git"
         wiki_folder = os.path.join(repo_folder, 'Wiki')
         if not os.path.exists(wiki_folder):
+            os.makedirs(wiki_folder, exist_ok=True)
             wiki_clone_result = subprocess.run(['git', 'clone', wiki_url, wiki_folder], capture_output=True, text=True)
             if wiki_clone_result.returncode != 0:
+                shutil.rmtree(wiki_folder)  # Remove the created Wiki folder if cloning fails
                 print(f"No wiki available or accessible for {repo_url}")
         else:
             print(f"Wiki already cloned: {wiki_folder}")
