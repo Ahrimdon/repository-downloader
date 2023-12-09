@@ -21,26 +21,28 @@ def download_file(url, output_path):
     else:
         print(f"File already exists: {output_path}")
 
-def download_assets_from_release(release_data, release_folder):
+def get_remote_file_list(release_data):
+    return {asset['name'] for asset in release_data.get('assets', [])}
+
+def download_assets_from_release(release_data, release_folder, num_to_fetch):
     if not os.path.exists(release_folder):
         os.makedirs(release_folder, exist_ok=True)
     print(f"Checking assets for release: {release_data['tag_name']}")
 
-    if 'assets' in release_data and release_data['assets']:
-        for asset in release_data['assets']:
+    remote_files = get_remote_file_list(release_data)
+    local_files = set(os.listdir(release_folder)) if os.path.exists(release_folder) else set()
+
+    missing_files = remote_files - local_files
+
+    for file_name in missing_files:
+        asset = next((asset for asset in release_data['assets'] if asset['name'] == file_name), None)
+        if asset:
             asset_url = asset['browser_download_url']
-            asset_name = asset['name']
-            asset_path = os.path.join(release_folder, asset_name)
+            asset_path = os.path.join(release_folder, file_name)
+            print(f"Downloading {file_name}...")
+            download_file(asset_url, asset_path)
 
-            if not os.path.exists(asset_path):
-                print(f"Downloading {asset_name}...")
-                download_file(asset_url, asset_path)
-            else:
-                print(f"Asset already exists: {asset_name}")
-    else:
-        print(f"No assets available for release: {release_data['tag_name']}")
-
-def download_assets(repo_url, base_folder, github_token):
+def download_assets(repo_url, base_folder, github_token, releases, prereleases):
     try:
         # Extract repository owner and name from URL
         split_url = repo_url.rstrip('/').split('/')
@@ -86,45 +88,43 @@ def download_assets(repo_url, base_folder, github_token):
         # Headers for authentication (if needed)
         headers = {'Authorization': f'token {github_token}'} if github_token else {}
 
-        # Download assets from the latest release
-        release_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
-        release_response = requests.get(release_url, headers=headers)
-        if release_response.ok:
-            release_data = release_response.json()
-            release_folder = os.path.join(repo_folder, f"Release-{release_data['tag_name']}")
-            download_assets_from_release(release_data, release_folder)
+        # Fetch and download specified number of latest releases
+        releases_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page={releases}"
+        releases_response = requests.get(releases_url, headers=headers)
+        if releases_response.ok:
+            for release_data in releases_response.json():
+                if not release_data['prerelease']:
+                    release_folder = os.path.join(repo_folder, f"Release-{release_data['tag_name']}")
+                    download_assets_from_release(release_data, release_folder, releases)
 
-        # Download assets from the latest prerelease
-        prerelease_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page=1&prerelease=true"
-        prerelease_response = requests.get(prerelease_url, headers=headers)
-        if prerelease_response.ok and prerelease_response.json():
-            prerelease_data = prerelease_response.json()[0]  # Get the first prerelease
-            prerelease_folder = os.path.join(repo_folder, f"Prerelease-{prerelease_data['tag_name']}")
-            download_assets_from_release(prerelease_data, prerelease_folder)
+        # Fetch and download specified number of latest prereleases
+        prereleases_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page={prereleases}&prerelease=true"
+        prereleases_response = requests.get(prereleases_url, headers=headers)
+        if prereleases_response.ok:
+            for prerelease_data in prereleases_response.json():
+                prerelease_folder = os.path.join(repo_folder, f"Prerelease-{prerelease_data['tag_name']}")
+                download_assets_from_release(prerelease_data, prerelease_folder, prereleases)
 
     except Exception as e:
         print(f"An error occurred with {repo_url}: {e}")
 
 def main():
-    # Toggle for choosing input method
-    use_text_file = True  # Set to False to use terminal input
-
-    # Base download folder - Replace with your preferred folder
-    base_folder = "C:\\Users\\ianco\\Downloads\\File Archiving\\"
-    
-    # Your GitHub token, if needed for authentication
-    github_token = ""  
+    use_text_file = True
+    base_folder = "C:/path/to/download_folder"
+    github_token = ""
+    releases = 1  # Number of latest releases to fetch
+    prereleases = 1  # Number of latest prereleases to fetch
 
     if use_text_file:
         with open('urls.txt', 'r') as file:
             for repo_url in file:
                 repo_url = repo_url.strip()
                 if repo_url:
-                    download_assets(repo_url, base_folder, github_token)
+                    download_assets(repo_url, base_folder, github_token, releases, prereleases)
     else:
         # User input for repository URL
         repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/author/repository'): ").strip()
-        download_assets(repo_url, base_folder, github_token)
+        download_assets(repo_url, base_folder, github_token, releases, prereleases)
 
 if __name__ == "__main__":
     main()
