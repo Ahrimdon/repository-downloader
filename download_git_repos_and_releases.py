@@ -109,8 +109,52 @@ def download_assets(repo_url, base_folder, github_token, releases, prereleases):
     except Exception as e:
         print(f"An error occurred with {repo_url}: {e}")
 
+def update_repository_and_check_releases(repo_folder, github_token, releases, prereleases):
+    # Search for the cloned repository path
+    cloned_repo_path = None
+    for item in os.listdir(repo_folder):
+        if os.path.isdir(os.path.join(repo_folder, item)) and os.path.exists(os.path.join(repo_folder, item, '.git')):
+            cloned_repo_path = os.path.join(repo_folder, item)
+            break
+
+    if not cloned_repo_path:
+        print(f"No git repository found in {repo_folder}")
+        return
+
+    # Update the repository
+    try:
+        subprocess.run(['git', '-C', cloned_repo_path, 'fetch', '--all'], check=True)
+        subprocess.run(['git', '-C', cloned_repo_path, 'pull', '--all'], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error updating repository in {cloned_repo_path}: {e}")
+        return
+
+    # Check and download new releases
+    try:
+        repo_name = os.path.basename(cloned_repo_path)
+        repo_owner = subprocess.run(['git', '-C', cloned_repo_path, 'config', '--get', 'remote.origin.url'], capture_output=True, text=True).stdout.strip().split('/')[-2]
+
+        headers = {'Authorization': f'token {github_token}'} if github_token else {}
+
+        releases_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page={releases}"
+        releases_response = requests.get(releases_url, headers=headers)
+        if releases_response.ok:
+            for release_data in releases_response.json():
+                if not release_data['prerelease']:
+                    release_folder = os.path.join(repo_folder, f"Release-{release_data['tag_name']}")
+                    download_assets_from_release(release_data, release_folder, releases)
+
+        prereleases_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page={prereleases}&prerelease=true"
+        prereleases_response = requests.get(prereleases_url, headers=headers)
+        if prereleases_response.ok:
+            for prerelease_data in prereleases_response.json():
+                prerelease_folder = os.path.join(repo_folder, f"Prerelease-{prerelease_data['tag_name']}")
+                download_assets_from_release(prerelease_data, prerelease_folder, prereleases)
+    except requests.RequestException as e:
+        print(f"Error checking releases for {repo_name}: {e}")
+
 def main():
-    folder = 'C:/path/to/folder'
+    folder = 'H:\\File Archiving\\repository-downloader\\Test\\'
     
     parser = argparse.ArgumentParser(description="Download and organize GitHub repository releases.")
     parser.add_argument('--use-text-file', action='store_true', help='Use URLs from a text file')
@@ -119,19 +163,26 @@ def main():
     parser.add_argument('--releases', type=int, default=1, help='Number of latest releases to fetch')
     parser.add_argument('--prereleases', type=int, default=1, help='Number of latest prereleases to fetch')
     parser.add_argument('--urls-file', type=str, default='urls.txt', help='Path to the text file with URLs')
+    parser.add_argument('-u', '--update', action='store_true', help='Update existing repositories and download new releases')
 
     args = parser.parse_args()
 
-    if args.use_text_file:
-        with open(args.urls_file, 'r') as file:
-            for repo_url in file:
-                repo_url = repo_url.strip()
-                if repo_url:
-                    download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
+    if args.update:
+        for repo_dir in os.listdir(args.base_folder):
+            full_repo_path = os.path.join(args.base_folder, repo_dir)
+            if os.path.isdir(full_repo_path):
+                update_repository_and_check_releases(full_repo_path, args.github_token, args.releases, args.prereleases)
     else:
-        # Prompt user for repository URL
-        repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/author/repository'): ").strip()
-        download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
+        if args.use_text_file:
+            with open(args.urls_file, 'r') as file:
+                for repo_url in file:
+                    repo_url = repo_url.strip()
+                    if repo_url:
+                        download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
+        else:
+            # Prompt user for repository URL
+            repo_url = input("Enter the GitHub repository URL (e.g., 'https://github.com/author/repository'): ").strip()
+            download_assets(repo_url, args.base_folder, args.github_token, args.releases, args.prereleases)
 
 if __name__ == "__main__":
     main()
